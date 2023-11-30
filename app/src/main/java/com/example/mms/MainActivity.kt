@@ -11,6 +11,7 @@ import android.widget.Button
 import android.widget.ImageView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import org.opencv.core.Point
 
 class MainActivity : AppCompatActivity() {
 
@@ -35,6 +36,7 @@ class MainActivity : AppCompatActivity() {
                 e.printStackTrace()
             }
         }
+        val a = Point()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -47,13 +49,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Другой вариант с применением when
-        when(requestCode){
-            REQUEST_TAKE_PHOTO ->{
-                if(resultCode == Activity.RESULT_OK && data !== null){
+        when (requestCode) {
+            REQUEST_TAKE_PHOTO -> {
+                if (resultCode == Activity.RESULT_OK && data !== null) {
                     imageView.setImageBitmap(data.extras?.get("data") as Bitmap)
                 }
             }
-            else ->{
+            else -> {
                 Toast.makeText(this, "Wrong request code", Toast.LENGTH_SHORT).show()
             }
         }

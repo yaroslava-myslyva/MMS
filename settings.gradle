@@ -14,3 +14,7 @@ dependencyResolutionManagement {
 }
 rootProject.name = "MMS"
 include ':app'
+
+
+include ':opencv'
+include ':sdk'
