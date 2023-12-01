@@ -1,121 +1,158 @@
 package com.example.mms
 
-import android.content.ContentValues.TAG
-import android.content.Context
-import android.hardware.Camera
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.SurfaceView
-import android.view.View
-import android.view.WindowManager
-import android.widget.Button
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import com.example.mms.databinding.ActivityMainBinding
 import org.opencv.android.BaseLoaderCallback
 import org.opencv.android.CameraBridgeViewBase
 import org.opencv.android.LoaderCallbackInterface
 import org.opencv.android.OpenCVLoader
-import org.opencv.core.CvType
 import org.opencv.core.Mat
-import org.opencv.core.MatOfByte
-import org.opencv.core.Scalar
-import org.opencv.core.Size
-import org.opencv.imgproc.Imgproc
 
-class MainActivity : AppCompatActivity(), CameraBridgeViewBase.CvCameraViewFrame, CameraBridgeViewBase.CvCameraViewListener2 {
-    private lateinit var mButton: Button
+class MainActivity : AppCompatActivity(), CameraBridgeViewBase.CvCameraViewListener2 {
+
+    companion object {
+        private const val REQUEST_CODE_CAMERA_PERMISSION = 101
+    }
+
     private lateinit var mOpenCvCameraView: CameraBridgeViewBase
-    private lateinit var mRgba: Mat
-    private lateinit var mByte: Mat
-    private lateinit var imGgray: Mat
-    private lateinit var imgCandy: Mat
-    lateinit var imageMat: Mat
+    private lateinit var mIntermediateMat: Mat
+    private lateinit var binding: ActivityMainBinding
 
-    private val mBaseLoaderCallback = object : BaseLoaderCallback(this) {
-        override fun onManagerConnected(status: Int) {
-            when (status) {
-                LoaderCallbackInterface.SUCCESS -> {
-                    mOpenCvCameraView.enableView()
-                }
-                else -> {
-                    super.onManagerConnected(status)
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+
+        when {
+            ContextCompat.checkSelfPermission(
+                this,
+                android.Manifest.permission.CAMERA
+            ) == PackageManager.PERMISSION_GRANTED -> {
+                // camera permission granted
+                activateOpenCVCameraView()
+            }
+            shouldShowRequestPermissionRationale(android.Manifest.permission.CAMERA) -> {
+                // In an educational UI, explain to the user why your app requires this
+                // permission for a specific feature to behave as expected. In this UI,
+                // include a "cancel" or "no thanks" button that allows the user to
+                // continue using your app without granting the permission.
+            }
+            else -> {
+                // directly ask for the permission.
+                requestPermissions(
+                    arrayOf(android.Manifest.permission.CAMERA),
+                    REQUEST_CODE_CAMERA_PERMISSION
+                )
+            }
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        // overengineered check for if permission with our request code and permission name was granted
+        if (requestCode == REQUEST_CODE_CAMERA_PERMISSION) {
+            val indexOfCameraPermission = permissions.indexOf(android.Manifest.permission.CAMERA)
+            if (indexOfCameraPermission != -1) {
+                if (grantResults.isNotEmpty()) {
+                    if (grantResults[indexOfCameraPermission] == PackageManager.PERMISSION_GRANTED) {
+                        Toast.makeText(
+                            applicationContext,
+                            "Camera permission granted!",
+                            Toast.LENGTH_LONG
+                        ).show()
+                        activateOpenCVCameraView()
+                    } else {
+                        Toast.makeText(
+                            applicationContext,
+                            "Camera permission is required to run this app!",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
                 }
             }
         }
     }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        setContentView(R.layout.activity_main)
-
-        mButton = findViewById(R.id.captureButton)
-        mOpenCvCameraView = findViewById(R.id.yourCameraView)
+    private fun activateOpenCVCameraView() {
+        // everything needed to start a camera preview
+        mOpenCvCameraView = binding.yourCameraView
+        mOpenCvCameraView.setCameraPermissionGranted()
+        mOpenCvCameraView.setCameraIndex(CameraBridgeViewBase.CAMERA_ID_ANY)
         mOpenCvCameraView.visibility = SurfaceView.VISIBLE
         mOpenCvCameraView.setCvCameraViewListener(this)
-
-        mButton.setOnClickListener { /* take a picture */ }
+        mOpenCvCameraView.enableView()
     }
 
-    override fun onPause() {
-        super.onPause()
-        if (mOpenCvCameraView != null) {
-            mOpenCvCameraView.disableView()
-        }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        if (mOpenCvCameraView != null) {
-            mOpenCvCameraView.disableView()
-        }
-    }
 
     override fun onResume() {
         super.onResume()
-        if (OpenCVLoader.initDebug()) {
-            mBaseLoaderCallback.onManagerConnected(LoaderCallbackInterface.SUCCESS)
-            Log.d(TAG, "onResume: true")
-        } else {
-            OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_3_2_0, this, mBaseLoaderCallback)
-            Log.d(TAG, "onResume: false")
+        // there's no need to load the opencv library if there is no camera preview (I think that sounds reasonable (?))
+        if (ContextCompat.checkSelfPermission(
+                this,
+                android.Manifest.permission.CAMERA
+            ) == PackageManager.PERMISSION_GRANTED
+        ) {
+            if (!OpenCVLoader.initDebug()) {
+                log("Internal OpenCV library not found. Using OpenCV Manager for initialization");
+                OpenCVLoader.initAsync(
+                    OpenCVLoader.OPENCV_VERSION_3_0_0, this,
+                    mLoaderCallback
+                )
+            } else {
+                log("OpenCV library found inside package. Using it!");
+                mLoaderCallback.onManagerConnected(LoaderCallbackInterface.SUCCESS);
+            }
+        }
+    }
+
+    private val mLoaderCallback: BaseLoaderCallback = object : BaseLoaderCallback(this) {
+        override fun onManagerConnected(status: Int) {
+            when (status) {
+                LoaderCallbackInterface.SUCCESS -> {
+                    log("OpenCV loaded successfully")
+                    activateOpenCVCameraView()
+                }
+                else -> super.onManagerConnected(status)
+            }
         }
     }
 
     override fun onCameraViewStarted(width: Int, height: Int) {
-        Log.d(TAG, "onCameraViewStarted: ")
-        imageMat = Mat(width, height, CvType.CV_8UC4)
-        mRgba = Mat()
-        mByte = Mat()
-        imGgray = Mat()
-        imgCandy = Mat()
+        log("onCameraViewStarted")
+        mIntermediateMat = Mat()
     }
 
     override fun onCameraViewStopped() {
-        mRgba.release()
+        log("onCameraViewStopped")
+        // Explicitly deallocate Mats
+        mIntermediateMat.release()
     }
 
-    override fun onCameraFrame(inputFrame: CameraBridgeViewBase.CvCameraViewFrame): Mat {
-        Log.d(TAG, "onCameraFrame: ")
-//        mRgba = inputFrame.rgba()
-//        Imgproc.cvtColor(mRgba, imGgray, Imgproc.COLOR_RGB2GRAY)
-//        Imgproc.adaptiveThreshold(imGgray, mByte, 255.0, Imgproc.ADAPTIVE_THRESH_MEAN_C, Imgproc.THRESH_BINARY, 35, 5.0)
-//
-//        return mByte // this is m Binary image
-        imageMat = inputFrame!!.rgba()
-        return imageMat
+    override fun onCameraFrame(inputFrame: CameraBridgeViewBase.CvCameraViewFrame?): Mat {
+        log("onCameraFrame")
+        val rgba = inputFrame!!.rgba()
+
+        return rgba
     }
 
-//    override fun onPictureTaken(data: ByteArray, camera: Camera) {
-//        // handle the taken picture
-//    }
-
-    override fun rgba(): Mat {
-        return mRgba
+    override fun onDestroy() {
+        mOpenCvCameraView.disableView()
+        super.onDestroy()
     }
 
-    override fun gray(): Mat {
-        return imGgray
+    private fun log(message: String) {
+        Log.i("MainActivity", message)
     }
-
-
 }
