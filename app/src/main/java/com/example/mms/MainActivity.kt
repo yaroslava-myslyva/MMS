@@ -1,63 +1,99 @@
 package com.example.mms
 
-import android.annotation.SuppressLint
-import android.app.Activity
-import android.content.ActivityNotFoundException
-import android.content.Intent
-import android.graphics.Bitmap
+
+
+import android.hardware.Camera
+import android.os.Build
 import android.os.Bundle
-import android.provider.MediaStore
-import android.widget.Button
-import android.widget.ImageView
-import android.widget.Toast
+import android.util.Log
+import android.view.SurfaceView
+import android.view.View
 import androidx.appcompat.app.AppCompatActivity
-import org.opencv.core.Point
+import org.opencv.android.BaseLoaderCallback
+import org.opencv.android.CameraBridgeViewBase
+import org.opencv.android.CameraBridgeViewBase.CvCameraViewFrame
+import org.opencv.android.CameraBridgeViewBase.CvCameraViewListener2
+import org.opencv.android.LoaderCallbackInterface
+import org.opencv.android.OpenCVLoader
+import org.opencv.core.Mat
 
-class MainActivity : AppCompatActivity() {
 
-    private val REQUEST_TAKE_PHOTO = 1
-
-    private lateinit var imageView: ImageView
-
-    @SuppressLint("MissingInflatedId")
+class MainActivity : AppCompatActivity(), CvCameraViewListener2 {
+    private var mOpenCvCameraView: CameraBridgeViewBase? = null
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
+        //getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         setContentView(R.layout.activity_main)
+        Log.d("ttt", "itit" + OpenCVLoader.initDebug())
+        OpenCVLoader.initDebug()
 
-        imageView = findViewById(R.id.image)
-        val button: Button = findViewById(R.id.button)
-
-        button.setOnClickListener {
-            val takePictureIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-            try {
-                startActivityForResult(takePictureIntent, REQUEST_TAKE_PHOTO)
-            } catch (e: ActivityNotFoundException) {
-                e.printStackTrace()
-            }
-        }
-        val a = Point()
+        mOpenCvCameraView =
+            findViewById<View>(R.id.image_manipulations_activity_surface_view) as CameraBridgeViewBase
+        mOpenCvCameraView!!.visibility = SurfaceView.VISIBLE
+       // mOpenCvCameraView!!.
+        mOpenCvCameraView!!.setCvCameraViewListener(this)
+        //mOpenCvCameraView!!.setCameraPermissionGranted()
+        mOpenCvCameraView!!.enableView()
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
+    public override fun onPause() {
+        super.onPause()
+        if (mOpenCvCameraView != null) mOpenCvCameraView!!.disableView()
+    }
 
-        if (requestCode == REQUEST_TAKE_PHOTO && resultCode == RESULT_OK) {
-            // Фотка сделана, извлекаем миниатюру картинки
-            val thumbnailBitmap = data?.extras?.get("data") as Bitmap
-            imageView.setImageBitmap(thumbnailBitmap)
-        }
-
-        // Другой вариант с применением when
-        when (requestCode) {
-            REQUEST_TAKE_PHOTO -> {
-                if (resultCode == Activity.RESULT_OK && data !== null) {
-                    imageView.setImageBitmap(data.extras?.get("data") as Bitmap)
+    private val mLoaderCallback: BaseLoaderCallback = object : BaseLoaderCallback(this) {
+        override fun onManagerConnected(status: Int) {
+            when (status) {
+                SUCCESS -> {
+                    Log.i("OpenCV", "OpenCV loaded successfully")
+                }
+                else -> {
+                    super.onManagerConnected(status)
                 }
             }
-            else -> {
-                Toast.makeText(this, "Wrong request code", Toast.LENGTH_SHORT).show()
-            }
         }
+    }
+
+
+    public override fun onResume() {
+        super.onResume()
+//        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.GINGERBREAD) {
+//            val info = Camera.CameraInfo()
+//            for (i in 0 until Camera.getNumberOfCameras()) {
+//                Camera.getCameraInfo(i, info)
+//                if (info.facing === Camera.CameraInfo.CAMERA_FACING_BACK) {
+//                    try {
+//                        // Gets to here OK
+//                        val camera = Camera.open(i)
+//                        camera.release()
+//                    } catch (e: Exception) {
+//                        e.printStackTrace()
+//                        //  throws runtime exception :"Failed to connect to camera service"
+//                    }
+//                }
+//            }
+//        }
+        if (!OpenCVLoader.initDebug()) {
+            Log.d(
+                "OpenCV",
+                "Internal OpenCV library not found. Using OpenCV Manager for initialization"
+            )
+            OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_3_0_0, this, mLoaderCallback)
+        } else {
+            Log.d("OpenCV", "OpenCV library found inside package. Using it!")
+            mLoaderCallback.onManagerConnected(LoaderCallbackInterface.SUCCESS)
+        }
+    }
+
+    public override fun onDestroy() {
+        super.onDestroy()
+        if (mOpenCvCameraView != null) mOpenCvCameraView!!.disableView()
+    }
+
+    override fun onCameraViewStarted(width: Int, height: Int) {}
+    override fun onCameraViewStopped() {}
+    override fun onCameraFrame(inputFrame: CvCameraViewFrame): Mat {
+        Log.d("ttt", "inputframe $inputFrame")
+        return inputFrame.rgba()
     }
 }

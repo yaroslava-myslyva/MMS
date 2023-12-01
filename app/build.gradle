@@ -44,4 +44,5 @@ dependencies {
 
     // open CV
     implementation project(':sdk')
+
 }
