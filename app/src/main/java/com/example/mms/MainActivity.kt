@@ -1,127 +1,121 @@
 package com.example.mms
 
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
+import android.content.ContentValues.TAG
+import android.content.Context
+import android.hardware.Camera
 import android.os.Bundle
-import android.os.Environment
 import android.util.Log
 import android.view.SurfaceView
 import android.view.View
+import android.view.WindowManager
 import android.widget.Button
-import android.widget.ImageView
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import org.opencv.android.BaseLoaderCallback
 import org.opencv.android.CameraBridgeViewBase
-import org.opencv.android.CameraBridgeViewBase.CvCameraViewFrame
+import org.opencv.android.LoaderCallbackInterface
 import org.opencv.android.OpenCVLoader
-import org.opencv.android.Utils
+import org.opencv.core.CvType
 import org.opencv.core.Mat
-import java.io.File
-import java.io.FileOutputStream
-import java.util.*
-
+import org.opencv.core.MatOfByte
+import org.opencv.core.Scalar
+import org.opencv.core.Size
+import org.opencv.imgproc.Imgproc
 
 class MainActivity : AppCompatActivity(), CameraBridgeViewBase.CvCameraViewFrame, CameraBridgeViewBase.CvCameraViewListener2 {
-
+    private lateinit var mButton: Button
     private lateinit var mOpenCvCameraView: CameraBridgeViewBase
-    private lateinit var captureButton: Button
-    private lateinit var imageView: ImageView
+    private lateinit var mRgba: Mat
+    private lateinit var mByte: Mat
+    private lateinit var imGgray: Mat
+    private lateinit var imgCandy: Mat
+    lateinit var imageMat: Mat
 
-    private var mGray: Mat? = null
-    private var mRgba: Mat? = null
+    private val mBaseLoaderCallback = object : BaseLoaderCallback(this) {
+        override fun onManagerConnected(status: Int) {
+            when (status) {
+                LoaderCallbackInterface.SUCCESS -> {
+                    mOpenCvCameraView.enableView()
+                }
+                else -> {
+                    super.onManagerConnected(status)
+                }
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContentView(R.layout.activity_main)
 
+        mButton = findViewById(R.id.captureButton)
         mOpenCvCameraView = findViewById(R.id.yourCameraView)
         mOpenCvCameraView.visibility = SurfaceView.VISIBLE
         mOpenCvCameraView.setCvCameraViewListener(this)
 
-        captureButton = findViewById(R.id.captureButton)
-        imageView = findViewById(R.id.imageView)
+        mButton.setOnClickListener { /* take a picture */ }
+    }
 
+    override fun onPause() {
+        super.onPause()
+        if (mOpenCvCameraView != null) {
+            mOpenCvCameraView.disableView()
+        }
+    }
 
-        // Ініціалізація OpenCV
+    override fun onDestroy() {
+        super.onDestroy()
+        if (mOpenCvCameraView != null) {
+            mOpenCvCameraView.disableView()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
         if (OpenCVLoader.initDebug()) {
-            // OpenCV ініціалізовано успішно
-            mOpenCvCameraView.enableView()
+            mBaseLoaderCallback.onManagerConnected(LoaderCallbackInterface.SUCCESS)
+            Log.d(TAG, "onResume: true")
         } else {
-            // OpenCV ініціалізація не вдалася
-            Log.e("OpenCV", "OpenCV initialization failed.")
+            OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_3_2_0, this, mBaseLoaderCallback)
+            Log.d(TAG, "onResume: false")
         }
-onCameraFrame(this)
-        // Додатковий код ініціалізації тут
-    }
-
-    override fun onCameraFrame(inputFrame: CvCameraViewFrame): Mat? {
-        val rgba = inputFrame.rgba()
-        Log.d("ttt", "onCameraFrame")
-
-        // При натисканні на кнопку ви можете зберегти поточний кадр
-        captureImage(rgba)
-        return rgba
-    }
-
-    private fun captureImage(frame: Mat) {
-        // Збереження кадру у форматі Mat або конвертація його у Bitmap та збереження
-        val bitmap = Bitmap.createBitmap(frame.cols(), frame.rows(), Bitmap.Config.ARGB_8888)
-        Utils.matToBitmap(frame, bitmap)
-
-        // Далі ви можете використовувати bitmap для відображення або збереження
-        // Наприклад, виведення на ImageView
-        val imageView = findViewById<ImageView>(R.id.imageView)
-        imageView.setImageBitmap(bitmap)
-        imageView.visibility = View.VISIBLE
-
-        // Або збереження в файл
-        // saveImage(bitmap);
-    }
-
-    // Простий метод для збереження Bitmap у файл
-    private fun saveImage(bitmap: Bitmap) {
-        val filename = "image.jpg"
-        val file = File(Environment.getExternalStorageDirectory(), filename)
-        try {
-            val out = FileOutputStream(file)
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 90, out)
-            out.flush()
-            out.close()
-            Toast.makeText(this, "Image saved to " + file.getAbsolutePath(), Toast.LENGTH_SHORT)
-                .show()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    fun onPictureTaken(data: ByteArray): Mat? {
-        val bitmap = BitmapFactory.decodeByteArray(data, 0, data.size)
-        val imageView = findViewById<ImageView>(R.id.imageView)
-        imageView.setImageBitmap(bitmap)
-        imageView.visibility = View.VISIBLE
-        mOpenCvCameraView.visibility = View.GONE // Приховати камеру
-        return Mat()
     }
 
     override fun onCameraViewStarted(width: Int, height: Int) {
-        // Ініціалізація матриць при старті камери
-        mGray = Mat()
+        Log.d(TAG, "onCameraViewStarted: ")
+        imageMat = Mat(width, height, CvType.CV_8UC4)
         mRgba = Mat()
+        mByte = Mat()
+        imGgray = Mat()
+        imgCandy = Mat()
     }
 
     override fun onCameraViewStopped() {
-        // Звільнення ресурсів при зупинці камери
-        mGray!!.release()
-        mRgba!!.release()
+        mRgba.release()
     }
 
+    override fun onCameraFrame(inputFrame: CameraBridgeViewBase.CvCameraViewFrame): Mat {
+        Log.d(TAG, "onCameraFrame: ")
+//        mRgba = inputFrame.rgba()
+//        Imgproc.cvtColor(mRgba, imGgray, Imgproc.COLOR_RGB2GRAY)
+//        Imgproc.adaptiveThreshold(imGgray, mByte, 255.0, Imgproc.ADAPTIVE_THRESH_MEAN_C, Imgproc.THRESH_BINARY, 35, 5.0)
+//
+//        return mByte // this is m Binary image
+        imageMat = inputFrame!!.rgba()
+        return imageMat
+    }
+
+//    override fun onPictureTaken(data: ByteArray, camera: Camera) {
+//        // handle the taken picture
+//    }
+
     override fun rgba(): Mat {
-        return mRgba ?: Mat()
+        return mRgba
     }
 
     override fun gray(): Mat {
-        return mGray ?: Mat()
+        return imGgray
     }
 
-    // Додаткові методи імплементації тут
+
 }
